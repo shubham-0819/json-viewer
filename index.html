@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>JSON Data Visualization</title>
+
+</head>
+
+<body>
+  <json-visualizer></json-visualizer>
+
+  <script>
+    // Define the custom element
+    class JSONVisualizer extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this.colorMapping = {};
+        this.data = {
+          "name": "John Doe",
+          "age": 30,
+          "position": "Software Engineer",
+          "department": "Engineering",
+          "salary": 5000,
+          "address": {
+            "street": "123 Main St",
+            "city": "New York",
+            "state": "NY",
+            "zip": "10001"
+          },
+          "skills": ["JavaScript", "Python", "HTML", "CSS"],
+          "projects": [
+            {
+              "name": "Project A",
+              "description": "Developing a web application",
+              "status": "In Progress"
+            },
+            {
+              "name": "Project B",
+              "description": "Creating a mobile app",
+              "status": "Completed"
+            }
+          ]
+        }
+      };
+
+      connectedCallback() {
+        this.render();
+      }
+
+      static get observedAttributes() {
+        return ['data'];
+      }
+
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'data' && newValue !== oldValue) {
+          try {
+            this.data = JSON.parse(newValue);
+            this.render();
+          } catch (error) {
+            console.error('Invalid JSON data');
+          }
+        }
+      }
+
+      render() {
+        this.shadowRoot.innerHTML = `  <style>
+          #container {
+            width: 500px;
+            height: auto;
+            border: 1px solid black;
+            padding: 10px;
+            overflow-y: auto;
+          }
+
+          .key {
+            cursor: pointer;
+          }
+
+
+          .key .arrow {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-top: 2px solid black;
+            border-right: 2px solid black;
+            transform: rotate(-45deg);
+            transition: transform 0.2s ease-in-out;
+            cursor: pointer;
+          }
+
+          .key.collapsed .arrow {
+            transform: rotate(45deg);
+          }
+
+        </style>`;
+
+        const container = document.createElement('div');
+        container.setAttribute('id', 'container');
+
+        const pre = document.createElement('pre');
+        pre.innerHTML = this.formatJSON(this.data, '', [this.colorizeByDataType.bind(this)]);
+
+        container.appendChild(pre);
+
+        const copyButton = document.createElement('button');
+        copyButton.textContent = 'Copy JSON';
+        copyButton.addEventListener('click', () => {
+          this.copyToClipboard(JSON.stringify(this.data, null, 2));
+        });
+        container.appendChild(copyButton);
+
+        this.shadowRoot.appendChild(container);
+
+        this.addCollapseListeners();
+      }
+
+      formatJSON(data, indent, plugins = []) {
+        let result = '';
+        const keys = Object.keys(data);
+
+        const isArray = Array.isArray(data);
+
+        if (!isArray) {
+          result += '{\n';
+        }
+
+        keys.forEach((key, index) => {
+          const value = data[key];
+          const isObject = typeof value === 'object' && value !== null;
+          const hasChildren = isObject && Object.keys(value).length > 0;
+
+          result += indent + '<span class="arrow' + (hasChildren ? ' collapsed' : '') + '"></span>';
+          result += '<span class="key">' + key + '</span>: ';
+
+          if (isObject) {
+            result += '\n' + this.formatJSON(value, indent + '  ', plugins);
+          } else {
+            result += this.applyPlugins(JSON.stringify(value), plugins);
+          }
+
+          if (index < keys.length - 1) {
+            result += ',';
+          }
+
+          result += '\n';
+        });
+
+        if (!isArray) {
+          result += indent.slice(0, -2) + '}';
+        } else {
+          result = '[' + result + indent.slice(0, -2) + ']';
+        }
+
+        return result;
+      }
+
+
+
+
+      applyPlugins(value, plugins) {
+        let result = value;
+        plugins.forEach(plugin => {
+          result = plugin(result);
+        });
+        return result;
+      }
+
+      // plugins for formatting json
+      capitalizeKeys(value) {
+        const parsedValue = JSON.parse(value);
+        const capitalizedKeys = Object.keys(parsedValue).reduce((result, key) => {
+          result[key.toUpperCase()] = parsedValue[key];
+          return result;
+        }, {});
+        return JSON.stringify(capitalizedKeys);
+      }
+
+      // Plugin function for colorizing text
+      colorizeText(value) {
+        // Example: Make the text red
+        return '<span style="color: red;">' + value + '</span>';
+      }
+
+
+
+
+      addCollapseListeners() {
+        const keys = this.shadowRoot.querySelectorAll('.key');
+
+        keys.forEach(key => {
+          key.addEventListener('click', () => {
+            key.classList.toggle('collapsed');
+          });
+        });
+      }
+
+      copyToClipboard(text) {
+        const tempTextArea = document.createElement('textarea');
+        tempTextArea.value = text;
+
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempTextArea);
+
+        alert('JSON copied to clipboard!');
+      }
+
+      
+
+      getRandomColor() {
+        const letters = '0123456789ABCDEF';
+        let color = '#';
+        for (let i = 0; i < 6; i++) {
+          color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+      }
+
+      getColorForDataType(dataType) {
+        if (!this.colorMapping[dataType]) {
+          this.colorMapping[dataType] = this.getRandomColor();
+        }
+        return this.colorMapping[dataType];
+      }
+
+      colorizeByDataType(value) {
+        const dataType = typeof value;
+
+        let colorClass = '';
+
+        if (dataType === 'string') {
+          colorClass = 'string-color';
+        } else if (dataType === 'number') {
+          colorClass = 'number-color';
+        } else if (dataType === 'boolean') {
+          colorClass = 'boolean-color';
+        } else if (Array.isArray(value)) {
+          colorClass = 'array-color';
+        } else if (dataType === 'object' && value !== null) {
+          colorClass = 'object-color';
+        }
+
+        const color = this.getColorForDataType(dataType);
+        const style = 'style="color: ' + color + ';"';
+
+        return '<span class="' + colorClass + '" ' + style + '>' + value + '</span>';
+      }
+    }
+
+    // Define the custom element tag name
+    customElements.define('json-visualizer', JSONVisualizer);
+  </script>
+</body>
+
+</html>
